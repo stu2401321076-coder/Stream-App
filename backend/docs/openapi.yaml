@@ -1,0 +1,693 @@
+openapi: 3.1.0
+
+info:
+  title: StreamFlix API
+  version: 1.0.0
+  description: |
+    REST API for the StreamFlix backend — a Netflix-like streaming service.
+
+    ## Auth
+    All endpoints except `POST /auth/register` and `POST /auth/login` require a
+    JWT in the `Authorization: Bearer <token>` header. Tokens are issued by the
+    login/register endpoints and are valid for 24 hours.
+
+    Video streaming uses a separate short-lived token passed as a query
+    parameter (`?token=…`) so that `<video src>` works without a custom header.
+
+    ## Errors
+    All non-2xx responses use the [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457.html)
+    format. See `components.schemas.Problem`.
+  contact:
+    name: StreamFlix
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development
+  - url: /api
+    description: Same-origin (production)
+
+tags:
+  - name: Auth
+    description: Registration, login, and current-user lookup
+  - name: Users
+    description: User directory and account management
+  - name: Movies
+    description: Movie catalog, uploads, and video streaming
+  - name: Reviews
+    description: User reviews of movies
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─────────────────────────────────────────────────────────── auth ──
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created, returns JWT and profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate with email + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated, returns JWT and profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Get the currently authenticated user
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ────────────────────────────────────────────────────────── users ──
+  /users:
+    get:
+      tags: [Users]
+      summary: List users (paginated)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/Order'
+        - name: email
+          in: query
+          description: Case-insensitive substring filter on email
+          schema: { type: string, maxLength: 100 }
+        - name: isActive
+          in: query
+          schema: { type: string, enum: ['true', 'false'] }
+      responses:
+        '200':
+          description: A page of users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ObjectId'
+    get:
+      tags: [Users]
+      summary: Get one user
+      responses:
+        '200':
+          description: User
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Users]
+      summary: Update mutable user fields
+      description: Only `birthDate`, `walletBalance`, and `isActive` can be updated here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                birthDate: { type: string, format: date }
+                walletBalance: { type: number, minimum: 0 }
+                isActive: { type: boolean }
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Users]
+      summary: Delete a user (admin only)
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────────────────────────────────── movies ──
+  /movies:
+    get:
+      tags: [Movies]
+      summary: List movies (paginated, filterable)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, title, averageRating, releaseDate]
+            default: createdAt
+        - $ref: '#/components/parameters/Order'
+        - name: title
+          in: query
+          description: Case-insensitive substring match on title
+          schema: { type: string, maxLength: 150 }
+        - name: minRating
+          in: query
+          schema: { type: number, minimum: 0, maximum: 10 }
+      responses:
+        '200':
+          description: A page of movies
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Movie' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+    post:
+      tags: [Movies]
+      summary: Create a movie (admin only)
+      description: |
+        Multipart form. Text fields plus optional `video` (mp4) and `poster` (image) files.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MovieUploadForm'
+            encoding:
+              video: { contentType: video/mp4 }
+              poster: { contentType: 'image/jpeg, image/png, image/webp' }
+      responses:
+        '201':
+          description: Created movie
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Movie' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /movies/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ObjectId'
+    get:
+      tags: [Movies]
+      summary: Get one movie
+      responses:
+        '200':
+          description: Movie
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Movie' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Movies]
+      summary: Update a movie (admin only)
+      description: Multipart form, all fields optional.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MovieUploadForm'
+      responses:
+        '200':
+          description: Updated movie
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Movie' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Movies]
+      summary: Delete a movie (admin only)
+      description: Also removes the associated video and poster files from disk.
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /movies/{id}/stream-token:
+    parameters:
+      - $ref: '#/components/parameters/ObjectId'
+    get:
+      tags: [Movies]
+      summary: Mint a short-lived stream token
+      description: |
+        Returns a JWT (1-hour TTL) bound to this movie. Pass it as `?token=…`
+        when requesting `/movies/{id}/stream`.
+      responses:
+        '200':
+          description: Stream token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiresIn]
+                properties:
+                  token: { type: string }
+                  expiresIn: { type: string, example: 1h }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /movies/{id}/stream:
+    parameters:
+      - $ref: '#/components/parameters/ObjectId'
+    get:
+      tags: [Movies]
+      summary: Stream the movie's video file
+      description: |
+        Supports HTTP byte-range requests. Authenticate with `?token=<jwt>`
+        obtained from `/movies/{id}/stream-token`. **Do not** send a bearer
+        header — this endpoint reads the token from the query string so the
+        URL can be used directly as a `<video src>`.
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+        - name: Range
+          in: header
+          schema: { type: string, example: bytes=0-1048575 }
+      responses:
+        '200':
+          description: Full file (no Range header was sent)
+          content:
+            video/mp4:
+              schema: { type: string, format: binary }
+        '206':
+          description: Partial content (Range satisfied)
+          content:
+            video/mp4:
+              schema: { type: string, format: binary }
+          headers:
+            Content-Range:
+              schema: { type: string, example: bytes 0-1048575/52428800 }
+            Accept-Ranges:
+              schema: { type: string, example: bytes }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '416':
+          description: Requested range not satisfiable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ──────────────────────────────────────────────────────── reviews ──
+  /reviews:
+    get:
+      tags: [Reviews]
+      summary: List reviews (paginated, filterable)
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: sortBy
+          in: query
+          schema: { type: string, enum: [createdAt, rating], default: createdAt }
+        - $ref: '#/components/parameters/Order'
+        - name: movieId
+          in: query
+          schema: { type: string }
+        - name: userId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: A page of reviews
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Reviews]
+      summary: Create a review
+      description: The authenticated user becomes the review's author automatically.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewCreateRequest' }
+      responses:
+        '201':
+          description: Created review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /reviews/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ObjectId'
+    get:
+      tags: [Reviews]
+      summary: Get one review
+      responses:
+        '200':
+          description: Review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Reviews]
+      summary: Update a review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewUpdateRequest' }
+      responses:
+        '200':
+          description: Updated review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Reviews]
+      summary: Delete a review
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+# ─────────────────────────────────────────────────────────── components ──
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT issued by `/auth/login` or `/auth/register`. Valid for 24 hours.
+
+  parameters:
+    ObjectId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[0-9a-fA-F]{24}$'
+        example: 65f3a1d2c8e7b9001fae12d4
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+    SortBy:
+      name: sortBy
+      in: query
+      schema: { type: string, default: createdAt }
+    Order:
+      name: order
+      in: query
+      schema: { type: string, enum: [asc, desc], default: desc }
+
+  responses:
+    Unauthorized:
+      description: Missing, malformed, or expired token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Caller lacks the required role
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Resource does not exist
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ValidationError:
+      description: Request body or query failed validation
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/Problem'
+              - type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field: { type: string }
+                        message: { type: string }
+    Conflict:
+      description: Resource already exists (e.g. duplicate email)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ServerError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details
+      required: [type, title, status, detail, instance]
+      properties:
+        type: { type: string, format: uri, example: 'https://httpstatuses.com/404' }
+        title: { type: string, example: Not Found }
+        status: { type: integer, example: 404 }
+        detail: { type: string, example: Movie not found }
+        instance: { type: string, example: /api/movies/65f3... }
+
+    MessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, example: Movie deleted successfully }
+
+    Paginated:
+      type: object
+      required: [data, pagination]
+      properties:
+        data:
+          type: array
+          items: {}
+        pagination:
+          type: object
+          required: [page, limit, total, totalPages]
+          properties:
+            page: { type: integer, example: 1 }
+            limit: { type: integer, example: 10 }
+            total: { type: integer, example: 42 }
+            totalPages: { type: integer, example: 5 }
+
+    User:
+      type: object
+      required: [_id, name, email, role, isActive, walletBalance, createdAt, updatedAt]
+      properties:
+        _id: { type: string, example: 65f3a1d2c8e7b9001fae12d4 }
+        name: { type: string, maxLength: 150 }
+        email: { type: string, format: email, maxLength: 100 }
+        role: { type: string, enum: [user, admin] }
+        birthDate: { type: [string, 'null'], format: date-time }
+        walletBalance: { type: number, minimum: 0 }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        email: { type: string, format: email, maxLength: 100 }
+        password: { type: string, minLength: 6, maxLength: 255 }
+        role: { type: string, enum: [user, admin] }
+        birthDate: { type: string, format: date }
+        walletBalance: { type: number, minimum: 0 }
+        isActive: { type: boolean }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 1 }
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token: { type: string, description: JWT bearer token (24h TTL) }
+        user:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            email: { type: string, format: email }
+            role: { type: string, enum: [user, admin] }
+            birthDate: { type: [string, 'null'], format: date-time }
+            walletBalance: { type: number }
+            isActive: { type: boolean }
+
+    Movie:
+      type: object
+      required: [_id, title, description, averageRating, createdAt, updatedAt]
+      properties:
+        _id: { type: string }
+        title: { type: string, maxLength: 150 }
+        description: { type: string, maxLength: 1000 }
+        releaseDate: { type: [string, 'null'], format: date-time }
+        averageRating: { type: number, minimum: 0, maximum: 10, default: 0 }
+        durationMinutes: { type: [integer, 'null'], minimum: 0 }
+        videoFilePath:
+          type: [string, 'null']
+          description: Server-side path. Use `/movies/{id}/stream` to actually fetch the bytes.
+        posterImage:
+          type: [string, 'null']
+          description: Server-side path, served under `/uploads/...`
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    MovieUploadForm:
+      type: object
+      properties:
+        title: { type: string, maxLength: 150 }
+        description: { type: string, maxLength: 1000 }
+        releaseDate: { type: string, format: date }
+        averageRating: { type: number, minimum: 0, maximum: 10 }
+        durationMinutes: { type: integer, minimum: 0 }
+        video:
+          type: string
+          format: binary
+          description: MP4 file
+        poster:
+          type: string
+          format: binary
+          description: JPEG / PNG / WebP image
+
+    Review:
+      type: object
+      required: [_id, userId, movieId, comment, rating, createdAt]
+      properties:
+        _id: { type: string }
+        userId:
+          description: Populated with `{ _id, email }` on read endpoints, plain ObjectId on create.
+          oneOf:
+            - type: string
+            - type: object
+              properties:
+                _id: { type: string }
+                email: { type: string, format: email }
+        movieId:
+          description: Populated with `{ _id, title }` on read endpoints, plain ObjectId on create.
+          oneOf:
+            - type: string
+            - type: object
+              properties:
+                _id: { type: string }
+                title: { type: string }
+        comment: { type: string, maxLength: 500 }
+        rating: { type: number, minimum: 0, maximum: 10 }
+        isSpoiler: { type: boolean, default: false }
+        createdAt: { type: string, format: date-time }
+
+    ReviewCreateRequest:
+      type: object
+      required: [movieId, comment, rating]
+      properties:
+        movieId: { type: string, description: ObjectId of the movie being reviewed }
+        comment: { type: string, minLength: 1, maxLength: 500 }
+        rating: { type: number, minimum: 0, maximum: 10 }
+        isSpoiler: { type: boolean, default: false }
+
+    ReviewUpdateRequest:
+      type: object
+      properties:
+        comment: { type: string, maxLength: 500 }
+        rating: { type: number, minimum: 0, maximum: 10 }
+        isSpoiler: { type: boolean }
