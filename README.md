@@ -2,8 +2,8 @@
 
 # 🎬 StreamFlix
 
-**A Netflix-style movie streaming platform**
-Built as the course project for *Distributed Applications*
+**A Netflix-style movie streaming platform** Built as the course project for
+_Distributed Applications_
 
 [![Node](https://img.shields.io/badge/Node-22%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)](https://expressjs.com/)
@@ -19,26 +19,30 @@ Built as the course project for *Distributed Applications*
 
 ## 👤 Student
 
-| | |
-|---|---|
-| **Name**            | _Your name here_ |
-| **Faculty Number**  | `2401321076` |
-| **Course**          | Distributed Applications — Software Engineering |
+|                    |                                                 |
+| ------------------ | ----------------------------------------------- |
+| **Faculty Number** | `2401321076`                                    |
+| **Course**         | Distributed Applications — Software Engineering |
 
 ---
 
 ## 📖 About
 
-StreamFlix is a full-stack streaming application where users can browse a movie catalog, watch videos with a custom HTML5 player, and leave reviews. Admins can upload new movies (poster + MP4) through the web UI.
+StreamFlix is a full-stack streaming application where users can browse a movie
+catalog, watch videos with a custom HTML5 player, and leave reviews. Admins can
+upload new movies (poster + MP4) through the web UI.
 
-The project is structured as a **REST API backend** and a **single-page application frontend**, communicating over JSON and JWT.
+The project is structured as a **REST API backend** and a **single-page
+application frontend**, communicating over JSON and JWT.
 
 ---
 
 ## ✨ Features
 
 ### Core
-- 🔐 JWT authentication (24h tokens) + short-lived (1h) tokens for video streaming
+
+- 🔐 JWT authentication (24h tokens) + short-lived (1h) tokens for video
+  streaming
 - 👥 Role-based access control (`user` / `admin`)
 - 🎞️ Full CRUD for movies, reviews, and users
 - 🔍 Multi-criteria filtering on every list endpoint
@@ -47,12 +51,15 @@ The project is structured as a **REST API backend** and a **single-page applicat
 - ⚡ Async/await throughout — no blocking calls
 
 ### Player
-- ▶️ Custom HTML5 video player with keyboard shortcuts (`Space`, `f`, `m`, `←`/`→`, `↑`/`↓`)
+
+- ▶️ Custom HTML5 video player with keyboard shortcuts (`Space`, `f`, `m`,
+  `←`/`→`, `↑`/`↓`)
 - 📡 HTTP byte-range streaming (`206 Partial Content`) — seek & resume work
 - ⏩ Playback speed control (0.5×–2×)
 - 🖼️ Auto-generated gradient posters when none uploaded
 
 ### Frontend
+
 - 🎨 Netflix-inspired dark UI with custom design system
 - 📱 Fully responsive — mobile drawer navigation
 - 🪄 Skeleton loaders, toast notifications, confirm dialogs
@@ -64,11 +71,11 @@ The project is structured as a **REST API backend** and a **single-page applicat
 
 ## 🛠️ Tech stack
 
-| Layer       | Stack                                                                |
-|-------------|----------------------------------------------------------------------|
-| **Backend** | Node.js · Express 4 · Mongoose · MongoDB Atlas · JWT · Zod · Multer |
-| **Frontend**| Preact 10 · Wouter (router) · Tailwind CSS · Vite · Lucide icons    |
-| **Docs**    | OpenAPI 3.1 (YAML) · Redoc HTML                                     |
+| Layer        | Stack                                                               |
+| ------------ | ------------------------------------------------------------------- |
+| **Backend**  | Node.js · Express 4 · Mongoose · MongoDB Atlas · JWT · Zod · Multer |
+| **Frontend** | Preact 10 · Wouter (router) · Tailwind CSS · Vite · Lucide icons    |
+| **Docs**     | OpenAPI 3.1 (YAML) · Redoc HTML                                     |
 
 ---
 
@@ -104,6 +111,7 @@ Stream-App/
 ## 🚀 Getting started
 
 ### Prerequisites
+
 - **Node.js 22+** (`node --version`)
 - A **MongoDB** connection string (Atlas or a local `mongod`)
 
@@ -146,7 +154,8 @@ npm run dev                # starts on http://localhost:5173
 
 → <http://localhost:5173>
 
-Sign in with the seeded admin (`admin@streamflix.com` / `admin123`) or register a new user.
+Sign in with the seeded admin (`admin@streamflix.com` / `admin123`) or register
+a new user.
 
 ---
 
@@ -154,11 +163,11 @@ Sign in with the seeded admin (`admin@streamflix.com` / `admin123`) or register 
 
 The full API surface is documented in three forms:
 
-| Format        | Path                                | Best for                              |
-|---------------|-------------------------------------|---------------------------------------|
+| Format        | Path                                                     | Best for                          |
+| ------------- | -------------------------------------------------------- | --------------------------------- |
 | OpenAPI 3.1   | [`backend/docs/openapi.yaml`](backend/docs/openapi.yaml) | machines, Swagger Editor, codegen |
-| Markdown      | [`backend/docs/API.md`](backend/docs/API.md) | quick browsing in GitHub          |
-| Rendered HTML | `backend/docs/api.html`             | offline reading                       |
+| Markdown      | [`backend/docs/API.md`](backend/docs/API.md)             | quick browsing in GitHub          |
+| Rendered HTML | `backend/docs/api.html`                                  | offline reading                   |
 
 Regenerate the HTML after editing the spec:
 
@@ -171,23 +180,23 @@ npx @redocly/cli build-docs docs/openapi.yaml -o docs/api.html
 
 ## ✅ Course requirements coverage
 
-| Requirement                                              | Implementation                                    |
-|----------------------------------------------------------|---------------------------------------------------|
-| Backend with web services                                | Express REST API (17 endpoints)                  |
-| Frontend client                                          | Preact SPA                                       |
-| Full CRUD on every model                                 | User, Movie, Review                              |
-| ≥ 3 related tables                                       | User ↔ Review ↔ Movie                            |
-| ≥ 6 columns per table, mixed data types                  | See `backend/models/`                            |
-| Required fields + text length constraints                | Enforced in Mongoose + Zod + UI                  |
-| Backend auth                                             | JWT bearer + short-lived stream JWT              |
-| Frontend auth                                            | `RequireAuth` / `RequireRole` route guards       |
-| Validation in DB + API + UI                              | Mongoose + Zod + native HTML validation          |
-| Filtering by ≥ 2 criteria per list                       | All three list endpoints                         |
-| Pagination + sorting                                     | All three list endpoints                         |
-| RFC 7807 / 9457 Problem Details                          | `backend/middleware/errorHandler.js`             |
-| Async I/O                                                | async/await throughout                           |
-| **Bonus** — file uploads                                 | Posters + videos via Multer                      |
-| **Bonus** — SPA                                          | Preact + Wouter + lazy routes                    |
+| Requirement                               | Implementation                             |
+| ----------------------------------------- | ------------------------------------------ |
+| Backend with web services                 | Express REST API (17 endpoints)            |
+| Frontend client                           | Preact SPA                                 |
+| Full CRUD on every model                  | User, Movie, Review                        |
+| ≥ 3 related tables                        | User ↔ Review ↔ Movie                      |
+| ≥ 6 columns per table, mixed data types   | See `backend/models/`                      |
+| Required fields + text length constraints | Enforced in Mongoose + Zod + UI            |
+| Backend auth                              | JWT bearer + short-lived stream JWT        |
+| Frontend auth                             | `RequireAuth` / `RequireRole` route guards |
+| Validation in DB + API + UI               | Mongoose + Zod + native HTML validation    |
+| Filtering by ≥ 2 criteria per list        | All three list endpoints                   |
+| Pagination + sorting                      | All three list endpoints                   |
+| RFC 7807 / 9457 Problem Details           | `backend/middleware/errorHandler.js`       |
+| Async I/O                                 | async/await throughout                     |
+| **Bonus** — file uploads                  | Posters + videos via Multer                |
+| **Bonus** — SPA                           | Preact + Wouter + lazy routes              |
 
 ---
 
