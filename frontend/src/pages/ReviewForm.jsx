@@ -71,6 +71,9 @@ export default function ReviewForm({ id }) {
       else await reviewsApi.create(payload);
       invalidateCache('reviews:');
       invalidateCache(`movie:${form.movieId}:reviews`);
+      invalidateCache('movies:');
+      invalidateCache('dash:');
+      invalidateCache(`movie:${form.movieId}`);
       toast.success(isEdit ? 'Review updated' : 'Review submitted');
       setLocation(`/movies/${form.movieId}`);
     } catch (err) {

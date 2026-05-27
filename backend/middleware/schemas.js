@@ -91,6 +91,7 @@ const movieFilterQuery = paginationSchema.extend({
 const reviewFilterQuery = paginationSchema.extend({
   movieId: z.string().optional(),
   userId: z.string().optional(),
+  minRating: z.coerce.number().min(0).max(10).optional(),
 });
 
 module.exports = {

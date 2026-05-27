@@ -56,6 +56,10 @@ export default function MovieDetail({ id }) {
     try {
       await reviewsApi.delete(pendingReview._id);
       invalidateCache(`movie:${id}:reviews`);
+      invalidateCache(`movie:${id}`);
+      invalidateCache('movies:');
+      invalidateCache('dash:');
+      invalidateCache('reviews:');
       reviewsQ.refetch();
       toast.success('Review deleted');
     } catch (err) {

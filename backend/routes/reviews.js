@@ -1,18 +1,32 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const Review = require('../models/Review');
+const Movie = require('../models/Movie');
 const { authMiddleware } = require('../middleware/auth');
 const { validate, validateQuery } = require('../middleware/validate');
 const { reviewCreateSchema, reviewUpdateSchema, reviewFilterQuery } = require('../middleware/schemas');
 
 const router = express.Router();
 
+async function recalcMovieRating(movieId) {
+  if (!movieId) return;
+  const [agg] = await Review.aggregate([
+    { $match: { movieId: new mongoose.Types.ObjectId(movieId) } },
+    { $group: { _id: '$movieId', avg: { $avg: '$rating' } } },
+  ]);
+  await Movie.findByIdAndUpdate(movieId, {
+    averageRating: agg ? Math.round(agg.avg * 10) / 10 : 0,
+  });
+}
+
 router.get('/', authMiddleware, validateQuery(reviewFilterQuery), async (req, res, next) => {
   try {
-    const { page, limit, sortBy, order, movieId, userId } = req.query;
+    const { page, limit, sortBy, order, movieId, userId, minRating } = req.query;
 
     const filter = {};
     if (movieId) filter.movieId = movieId;
     if (userId) filter.userId = userId;
+    if (minRating !== undefined) filter.rating = { $gte: minRating };
 
     const sortField = sortBy || 'createdAt';
     const sortOrder = order === 'asc' ? 1 : -1;
@@ -69,6 +83,7 @@ router.post('/', authMiddleware, validate(reviewCreateSchema), async (req, res, 
       ...req.body,
       userId: req.user.id,
     });
+    await recalcMovieRating(review.movieId);
     const populated = await Review.findById(review._id)
       .populate('userId', 'email')
       .populate('movieId', 'title');
@@ -86,6 +101,9 @@ router.put('/:id', authMiddleware, validate(reviewUpdateSchema), async (req, res
     })
       .populate('userId', 'email')
       .populate('movieId', 'title');
+    if (review) {
+      await recalcMovieRating(review.movieId?._id || review.movieId);
+    }
     if (!review) {
       return res.status(404).json({
         type: 'https://httpstatuses.com/404',
@@ -104,6 +122,9 @@ router.put('/:id', authMiddleware, validate(reviewUpdateSchema), async (req, res
 router.delete('/:id', authMiddleware, async (req, res, next) => {
   try {
     const review = await Review.findByIdAndDelete(req.params.id);
+    if (review) {
+      await recalcMovieRating(review.movieId);
+    }
     if (!review) {
       return res.status(404).json({
         type: 'https://httpstatuses.com/404',

@@ -21,17 +21,18 @@ export default function Reviews() {
   const toast = useToast();
   const [sortBy, setSortBy] = useState('createdAt');
   const [order, setOrder] = useState('desc');
+  const [minRating, setMinRating] = useState('');
   const [page, setPage] = useState(1);
   const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
     setPage(1);
-  }, [sortBy, order]);
+  }, [sortBy, order, minRating]);
 
-  const params = { page, limit: PAGE_SIZE, sortBy, order };
+  const params = { page, limit: PAGE_SIZE, sortBy, order, minRating };
   const { data, loading, error, refetch } = useApi(
     () => reviewsApi.list(params),
-    [page, sortBy, order],
+    [page, sortBy, order, minRating],
     { cacheKey: `reviews:list:${JSON.stringify(params)}` }
   );
 
@@ -42,6 +43,12 @@ export default function Reviews() {
     try {
       await reviewsApi.delete(pendingDelete._id);
       invalidateCache('reviews:');
+      invalidateCache('movies:');
+      invalidateCache('dash:');
+      const deletedMovieId = pendingDelete.movieId?._id || pendingDelete.movieId;
+      if (deletedMovieId) {
+        invalidateCache(`movie:${deletedMovieId}`);
+      }
       refetch();
       toast.success('Review deleted');
     } catch (err) {
@@ -64,7 +71,21 @@ export default function Reviews() {
           }
         />
 
-        <div className="flex justify-end mb-5">
+        <div className="flex flex-wrap justify-end gap-3 mb-5">
+          <Select
+            value={minRating}
+            onChange={(e) => setMinRating(e.target.value)}
+            aria-label="Filter reviews by rating"
+            className="max-w-xs"
+          >
+            <option value="">All ratings</option>
+            <option value="9">9+ ★</option>
+            <option value="8">8+ ★</option>
+            <option value="7">7+ ★</option>
+            <option value="6">6+ ★</option>
+            <option value="4">4+ ★</option>
+            <option value="2">2+ ★</option>
+          </Select>
           <Select
             value={`${sortBy}:${order}`}
             onChange={(e) => {

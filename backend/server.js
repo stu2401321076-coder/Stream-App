@@ -7,6 +7,25 @@ const userRoutes = require('./routes/users');
 const movieRoutes = require('./routes/movies');
 const reviewRoutes = require('./routes/reviews');
 const errorHandler = require('./middleware/errorHandler');
+const Movie = require('./models/Movie');
+const Review = require('./models/Review');
+
+async function backfillMovieRatings() {
+  const aggregates = await Review.aggregate([
+    { $group: { _id: '$movieId', avg: { $avg: '$rating' } } },
+  ]);
+  const ops = aggregates.map((a) => ({
+    updateOne: {
+      filter: { _id: a._id },
+      update: { averageRating: Math.round(a.avg * 10) / 10 },
+    },
+  }));
+  if (ops.length) await Movie.bulkWrite(ops);
+  await Movie.updateMany(
+    { _id: { $nin: aggregates.map((a) => a._id) } },
+    { averageRating: 0 }
+  );
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,8 +46,13 @@ app.use(errorHandler);
 
 mongoose
   .connect(MONGO_URI)
-  .then(() => {
+  .then(async () => {
     console.log('Connected to MongoDB');
+    try {
+      await backfillMovieRatings();
+    } catch (err) {
+      console.error('Failed to backfill movie ratings:', err.message);
+    }
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
